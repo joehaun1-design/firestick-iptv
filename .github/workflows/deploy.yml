@@ -1,0 +1,49 @@
+name: Publish curated IPTV and fresh EPG
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8,20 * * *"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: firetv-pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firestick-iptv-cloud-starter/firestick-iptv-cloud
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test playlist builder
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Generate playlist and EPG
+        run: python3 build.py
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: firestick-iptv-cloud-starter/firestick-iptv-cloud/_site
+
+      - name: Deploy site
+        id: deployment
+        uses: actions/deploy-pages@v4
