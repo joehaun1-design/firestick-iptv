@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "test_device": "Fire TV Stick 4K 1st generation (2018), Kodi 21.3 Omega",
+  "recorded_on": "2026-11-08",
+  "observation": "Playback tested on the actual Fire Stick; partial EPG coverage observed",
+  "results": [
+    {
+      "name": "beIN SPORTS XTRA",
+      "tvg_id": "beINSPORTSXTRA.us@SD",
+      "url": "https://bein-xtra-bein.amagi.tv/playlist.m3u8",
+      "result": "works"
+    },
+    {
+      "name": "Red Bull TV",
+      "tvg_id": "RedBullTV.at@HD",
+      "url": "https://rbmn-live.akamaized.net/hls/live/590964/BoRB-AT/master.m3u8",
+      "result": "works"
+    },
+    {
+      "name": "ABC News Live",
+      "tvg_id": "ABCNews.us@Free",
+      "url": "https://abcnews-streams.akamaized.net/hls/live/2023560/abcnewshudson1/master.m3u8",
+      "result": "fails"
+    },
+    {
+      "name": "CBS News 24/7",
+      "tvg_id": "CBSNews.us@Free",
+      "url": "https://cbsnews.akamaized.net/hls/live/2020607/cbsnlineup_8/master.m3u8",
+      "result": "fails"
+    },
+    {
+      "name": "NBC News NOW",
+      "tvg_id": "NBCNewsNOW.us@SD",
+      "url": "https://d1bl6tskrpq9ze.cloudfront.net/hls/master.m3u8?ads.xumo_channelId=99984003",
+      "result": "works"
+    },
+    {
+      "name": "Bloomberg Television",
+      "tvg_id": "BloombergTelevision.us@Free",
+      "url": "https://bloomberg.com/media-manifest/streams/us.m3u8",
+      "result": "works"
+    }
+  ]
+}

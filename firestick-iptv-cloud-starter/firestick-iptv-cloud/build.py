@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Build a small public M3U + genuine, current XMLTV schedule for GitHub Pages.
+"""Fire TV IPTV v2.1: pinned production + user-certified approved lineup.
 
-Uses only the Python standard library. Fail closed if guide data cannot be
-verified; GitHub Pages will retain the last successful deployment.
+Uses only the Python standard library. Source-locked playback results govern
+approvals; network HLS probes are advisory, never promotion authority.
+Fail-closed CI leaves the previously published GitHub Pages site in place.
 """
 from __future__ import annotations
 
@@ -13,6 +14,8 @@ import io
 import json
 import re
 import sys
+import shutil
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 import urllib.request
@@ -24,6 +27,7 @@ from urllib.parse import urlparse
 ROOT = Path(__file__).resolve().parent
 DEST = ROOT / "_site"
 CHANNELS_FILE = ROOT / "channels.json"
+PLAYBACK_FILE = ROOT / "playback-results.json"
 GUIDE_SOURCE = "https://i.mjh.nz/PlutoTV/us.xml.gz"
 NBC_SOURCE_ID = "6549306c83595c000815a696"
 MAX_DOWNLOAD = 80 * 1024 * 1024
@@ -196,15 +200,67 @@ def probe_hls(candidate: dict) -> tuple[dict, str]:
         return candidate, f"unavailable: {type(exc).__name__}"
 
 
-def select_preview_candidates(probe_results: list[tuple[dict, str]], pinned: list[dict]) -> list[dict]:
-    seen = {p["tvg_id"] for p in pinned}
-    selected = []
+def read_playback_results(path: Path, candidates: list[dict], pinned: list[dict]) -> dict[str, str]:
+    """Read human Kodi playback evidence, pinned to *exact* tested stream URLs.
+
+    Stream URLs changing after tests must stop publication rather than silently
+    transfer a previous successful playback certificate to a new endpoint.
+    """
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("schema_version") != 1 or not isinstance(data.get("results"), list):
+        raise ValueError("Invalid playback-results.json schema")
+    lookup = {ch["tvg_id"]: ch for ch in candidates}
+    if len(lookup) != len(candidates):
+        raise ValueError("Duplicate candidate tvg_id")
+    pinned_ids = {ch["tvg_id"] for ch in pinned}
+    outcomes: dict[str, str] = {}
+    for record in data["results"]:
+        if not isinstance(record, dict):
+            raise ValueError("Playback record must be an object")
+        identifier = record.get("tvg_id")
+        result = record.get("result")
+        if identifier in outcomes or identifier in pinned_ids:
+            raise ValueError(f"Duplicate or pinned playback ID: {identifier}")
+        if result not in ("works", "fails"):
+            raise ValueError(f"Invalid playback result: {result}")
+        candidate = lookup.get(identifier)
+        if not candidate:
+            raise ValueError(f"Unknown candidate in playback evidence: {identifier}")
+        if (record.get("name") != candidate["name"] or
+                record.get("url") != candidate["url"]):
+            raise ValueError(f"Changed URL/name since Kodi test: {identifier}")
+        outcomes[identifier] = result
+    if not outcomes:
+        raise ValueError("Playback evidence is empty")
+    return outcomes
+
+
+def select_approved_channels(pinned: list[dict], candidates: list[dict], outcomes: dict[str, str]) -> list[dict]:
+    """Only Kodi-confirmed 'works' records can be added to the approved feed."""
+    additions = [
+        {key: ch[key] for key in ("name", "tvg_id", "group", "url")}
+        for ch in candidates if outcomes.get(ch["tvg_id"]) == "works"
+    ]
+    approved = pinned + additions
+    if len({ch["tvg_id"] for ch in approved}) != len(approved):
+        raise ValueError("Duplicate approved tvg_id")
+    return approved
+
+
+def select_preview_candidates(
+    probe_results: list[tuple[dict, str]], approved: list[dict], outcomes: dict[str, str]
+) -> list[dict]:
+    """Only new, unreviewed manifest-pass streams go into discovery preview."""
+    seen = {p["tvg_id"] for p in approved}
+    discovered = []
     for candidate, result in probe_results:
-        if result != "HLS manifest HTTP 200" or candidate["tvg_id"] in seen:
+        identifier = candidate["tvg_id"]
+        if (identifier in seen or identifier in outcomes or
+                result != "HLS manifest HTTP 200"):
             continue
-        seen.add(candidate["tvg_id"])
-        selected.append({key: candidate[key] for key in ("name","tvg_id","group","url")})
-    return selected
+        seen.add(identifier)
+        discovered.append({key: candidate[key] for key in ("name", "tvg_id", "group", "url")})
+    return discovered
 
 
 def _key_name(name: str) -> str:
@@ -254,49 +310,124 @@ def create_preview_guide(source_xml: bytes, base_guide: bytes, candidates: list[
     return ET.tostring(base, encoding="utf-8", xml_declaration=True), populated
 
 
-def write_v2_preview(source_xml: bytes, base_guide: bytes, pinned: list[dict], now: datetime) -> dict:
-    # Parallel probes keep the GitHub scheduled build short; failures do not
-    # change the already proven three-channel list or its XMLTV guide.
+def make_v21_outputs(source_xml: bytes, pinned_guide: bytes, pinned: list[dict], now: datetime) -> dict:
+    """Return complete publishable outputs without modifying the filesystem."""
+    outcomes = read_playback_results(PLAYBACK_FILE, PREVIEW_CANDIDATES, pinned)
+    approved = select_approved_channels(pinned, PREVIEW_CANDIDATES, outcomes)
+    if len(approved) <= len(pinned):
+        raise ValueError("No approved Kodi-tested additions")
+
+    # Match guide schedules against actual source XML; no invented programmes.
+    approved_guide, approved_guide_names = create_preview_guide(
+        source_xml, pinned_guide, approved[len(pinned):], now
+    )
+
+    # Probing is advisory only: it cannot add/remove Kodi-approved channels.
     with ThreadPoolExecutor(max_workers=5) as pool:
-        results = list(pool.map(probe_hls, PREVIEW_CANDIDATES))
-    candidates = select_preview_candidates(results, pinned)
-    preview_guide, guide_names = create_preview_guide(source_xml, base_guide, candidates, now)
-    (DEST / "preview.m3u").write_text(create_m3u(pinned + candidates), encoding="utf-8")
-    (DEST / "preview-guide.xml").write_bytes(preview_guide)
-    report = {
+        probes = list(pool.map(probe_hls, PREVIEW_CANDIDATES))
+    discoveries = select_preview_candidates(probes, approved, outcomes)
+    preview = approved + discoveries
+    preview_guide, preview_guide_names = create_preview_guide(
+        source_xml, pinned_guide, preview[len(pinned):], now
+    )
+
+    rejected = [ch["name"] for ch in PREVIEW_CANDIDATES if outcomes.get(ch["tvg_id"]) == "fails"]
+    certified = [ch["name"] for ch in approved[len(pinned):]]
+    status = {
         "generated_utc": now.isoformat(),
-        "known_working_channels": len(pinned),
-        "candidate_channels_passed_basic_http_hls_probe": len(candidates),
-        "preview_total_channels": len(pinned) + len(candidates),
-        "preview_epg_channel_names": guide_names,
-        "candidates": [{"name": item["name"], "result": result} for item, result in results],
-        "caution": "HTTP probe results do not prove live video works on your Fire Stick. Only after manual Kodi testing should candidates be promoted."
+        "pinned_production_channels": len(pinned),
+        "approved_total_channels": len(approved),
+        "new_kodi_verified_channels": certified,
+        "kodi_playback_failed_channels": rejected,
+        "approved_guide_channel_names": approved_guide_names,
+        "approval_rule": "Exact recorded name, tvg_id and stream URL with Kodi playback result 'works'; HTTP probes never approve or revoke playback."
     }
-    (DEST / "preview-status.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    return report
+    preview_status = {
+        "generated_utc": now.isoformat(),
+        "approved_channels": len(approved),
+        "unreviewed_discovery_channels": len(discoveries),
+        "preview_total_channels": len(preview),
+        "preview_epg_channel_names": preview_guide_names,
+        "candidate_probe_results": [
+            {"name": candidate["name"], "manifest_probe": result,
+             "kodi_playback": outcomes.get(candidate["tvg_id"], "untested")}
+            for candidate, result in probes
+        ],
+        "caution": "An HTTP/HLS manifest response is not proof of Kodi playback. Failed Kodi streams are excluded."
+    }
+    return {
+        "approved.m3u": create_m3u(approved).encode("utf-8"),
+        "approved-guide.xml": approved_guide,
+        "approved-status.json": (json.dumps(status, indent=2) + "\n").encode("utf-8"),
+        "preview.m3u": create_m3u(preview).encode("utf-8"),
+        "preview-guide.xml": preview_guide,
+        "preview-status.json": (json.dumps(preview_status, indent=2) + "\n").encode("utf-8"),
+    }
+
+
+def render_v21_index(pinned: list[dict], status: dict, now: datetime) -> str:
+    rows = "\n".join(
+        f"<tr><td>{html.escape(ch['name'])}</td><td>{html.escape(ch['group'])}</td></tr>"
+        for ch in pinned
+    )
+    timestamp = html.escape(now.strftime("%Y-%m-%d %H:%M UTC"))
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire TV — Cloud IPTV Manager</title><style>
+body{{font:16px/1.5 system-ui,sans-serif;margin:3em auto;max-width:680px;padding:0 1em;background:#0f172a;color:#f1f5f9}}
+a{{color:#93c5fd}}table{{border-collapse:collapse;width:100%}}td,th{{padding:.65em;border-bottom:1px solid #475569;text-align:left}}
+small{{color:#cbd5e1}}</style></head><body>
+<h1>Fire TV — Cloud IPTV Manager v2.1</h1>
+<p><strong>Production:</strong> {len(pinned)} original Kodi-tested channels. <a href="channels.m3u">Production M3U</a> · <a href="guide.xml">Production XMLTV</a></p>
+<p><strong>Approved:</strong> {status['approved_total_channels']} Kodi-tested channels. <a href="approved.m3u">Approved M3U</a> · <a href="approved-guide.xml">Approved XMLTV</a> · <a href="approved-status.json">Approval report</a></p>
+<p><strong>Discovery preview:</strong> <a href="preview.m3u">Preview M3U</a> · <a href="preview-guide.xml">Preview XMLTV</a> · <a href="preview-status.json">Probe report</a></p>
+<table><thead><tr><th>Original production channel</th><th>Group</th></tr></thead><tbody>{rows}</tbody></table>
+<p><small>Updated {timestamp}. Guide listings only where genuinely sourced; no paid/private streams.</small></p>
+</body></html>"""
+
+
+def publish_site(outputs: dict[str, bytes]) -> None:
+    """Stage complete site before replacement; CI only deploys a successful build."""
+    stage = Path(tempfile.mkdtemp(prefix="site-v21-", dir=ROOT))
+    try:
+        for name, data in outputs.items():
+            if "/" in name or "\\" in name or name.startswith("."):
+                raise ValueError("Invalid output filename")
+            (stage / name).write_bytes(data)
+        if DEST.exists():
+            shutil.rmtree(DEST)
+        stage.rename(DEST)
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
 
 
 def main() -> None:
     now = datetime.now(timezone.utc)
-    channels = read_channels(CHANNELS_FILE)
-    data = download_guide()
-    xml, stats = create_guide(data, channels, now)
-    DEST.mkdir(exist_ok=True)
-    (DEST / "channels.m3u").write_text(create_m3u(channels), encoding="utf-8")
-    (DEST / "guide.xml").write_bytes(xml)
-    (DEST / "index.html").write_text(render_index(channels, now, stats), encoding="utf-8")
-    status = {
+    pinned = read_channels(CHANNELS_FILE)
+    source_xml = download_guide()
+    pinned_guide, stats = create_guide(source_xml, pinned, now)
+    additions = make_v21_outputs(source_xml, pinned_guide, pinned, now)
+    approved_status = json.loads(additions["approved-status.json"])
+    production_status = {
         "generated_utc": now.isoformat(),
-        "channel_count": len(channels),
+        "channel_count": len(pinned),
         "epg_channels": ["NBC Sports NOW"],
         **stats,
-        "note": "Only the NBC Sports NOW channel has verified programme schedule data."
+        "note": "The original production M3U and EPG remain isolated from v2.1 approval/discovery."
     }
-    (DEST / "status.json").write_text(json.dumps(status, indent=2) + "\n", encoding="utf-8")
-    preview = write_v2_preview(data, xml, channels, now)
-    print(f"Preview candidates: {preview['candidate_channels_passed_basic_http_hls_probe']} candidates passed basic HTTP manifest probes")
-    print(f"Build OK: {len(channels)} channels, {stats['programme_count']} current EPG entries")
-    print(f"Guide coverage ends: {stats['last_programme_end_utc']}")
+    outputs = {
+        "channels.m3u": create_m3u(pinned).encode("utf-8"),
+        "guide.xml": pinned_guide,
+        "index.html": render_v21_index(pinned, approved_status, now).encode("utf-8"),
+        "status.json": (json.dumps(production_status, indent=2) + "\n").encode("utf-8"),
+        **additions,
+    }
+    publish_site(outputs)
+    print(f"Build OK: {len(pinned)} pinned; {approved_status['approved_total_channels']} approved; "
+          f"{stats['programme_count']} production EPG entries")
+    print("Approved channels: " + ", ".join(approved_status["new_kodi_verified_channels"]))
+    print("Guide coverage ends: " + stats["last_programme_end_utc"])
 
 
 if __name__ == "__main__":
