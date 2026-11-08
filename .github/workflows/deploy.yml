@@ -30,11 +30,31 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Test playlist builder
+      - name: Test playlist builder and expansion
         run: python3 -m unittest discover -s tests -v
 
-      - name: Generate playlist and EPG
+      - name: Generate approved playlist and EPG
         run: python3 build.py
+
+      - name: Generate isolated expansion preview
+        run: python3 expansion.py
+
+      - name: Verify old and new output files
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          s = Path('_site')
+          expected = {'channels.m3u', 'guide.xml', 'approved.m3u', 'approved-guide.xml',
+                      'expansion.m3u', 'expansion-guide.xml', 'expansion-status.json'}
+          assert all((s / name).is_file() and (s / name).stat().st_size > 0 for name in expected)
+          assert (s / 'channels.m3u').read_text().count('#EXTINF') == 3
+          assert (s / 'approved.m3u').read_text().count('#EXTINF') == 7
+          status = json.loads((s / 'expansion-status.json').read_text())
+          assert status['approved_playback_certified'] == 7
+          assert (s / 'expansion.m3u').read_text().count('#EXTINF') == status['expansion_total_channels']
+          print('Validated independent production, approved and expansion outputs')
+          PY
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
