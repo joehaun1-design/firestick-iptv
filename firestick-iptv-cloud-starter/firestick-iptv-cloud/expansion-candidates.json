@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "source": "https://github.com/iptv-org/iptv",
+  "source_note": "Curated publicly listed FAST and broadcaster streams from iptv-org streams/us.m3u and streams/de.m3u as of 2026-11-08; listing and manifest response do not prove U.S. availability, copyright permission, or Fire Stick playback.",
+  "candidates": [
+    {
+      "name": "Racer Network",
+      "tvg_id": "RacerNetwork.us@SD",
+      "group": "Motorsports",
+      "url": "https://amg00378-mavtv-amg00378c3-sportstribal-emea-1325.playouts.now.amagi.tv/mavtv-smn-xm/playlist.m3u8"
+    },
+    {
+      "name": "Racer Select",
+      "tvg_id": "RacerSelect.us@SD",
+      "group": "Motorsports",
+      "url": "https://amg00378-amg00378c4-freelivesports-emea-5637.playouts.now.amagi.tv/playlist.m3u8"
+    },
+    {
+      "name": "Motorvision TV",
+      "tvg_id": "Motorvision.de@SD",
+      "group": "Motorsports",
+      "url": "https://stream.ads.ottera.tv/playlist.m3u8?network_id=535"
+    },
+    {
+      "name": "CBS Sports Golazo Network",
+      "tvg_id": "CBSSportsGolazoNetwork.us@SD",
+      "group": "Sports",
+      "url": "https://dai.google.com/linear/hls/event/7f3Wv6f7QEKfQna22jHqLQ/master.m3u8"
+    },
+    {
+      "name": "Fubo Sports Network",
+      "tvg_id": "FuboSportsNetwork.us@SD",
+      "group": "Sports",
+      "url": "https://aegis-cloudfront-1.tubi.video/c2ac89da-5c69-439e-b85d-d87de0548b54/5.m3u8"
+    },
+    {
+      "name": "FTF Sports",
+      "tvg_id": "FTFSports.us@SD",
+      "group": "Sports",
+      "url": "https://1593604785.rsc.cdn77.org/FTF/FTF_SCTE.m3u8"
+    },
+    {
+      "name": "FilmRise Classic TV",
+      "tvg_id": "FilmRiseClassicTV.us@SD",
+      "group": "Movies",
+      "url": "https://d2tv4k5moji5m7.cloudfront.net/v1/master/3722c60a815c199d9c0ef36c5b73da68a62b09d1/cc-lu4pzh9l4b57p/master.m3u8"
+    },
+    {
+      "name": "Hallmark Movies & More",
+      "tvg_id": "HallmarkMoviesMore.us@SD",
+      "group": "Movies",
+      "url": "https://dbrb49pjoymg4.cloudfront.net/v1/master/3fec3e5cac39a52b2132f9c66c83dae043dc17d4/prod_default_xumo-ams-aws/master.m3u8?ads.xumo_channelId=99991709"
+    },
+    {
+      "name": "Magnificent Movies Network",
+      "tvg_id": "MagnificentMoviesNetwork.us@SD",
+      "group": "Movies",
+      "url": "https://mmn1-301f.kxcdn.com/hls/MMN-HLS.m3u8"
+    },
+    {
+      "name": "Whiplash Cinema",
+      "tvg_id": "WhiplashCinema.us@SD",
+      "group": "Movies",
+      "url": "https://cdn.whiplash.cc/whiplash-cinema/index.m3u8"
+    },
+    {
+      "name": "Documentary+",
+      "tvg_id": "DocumentaryPlus.us@US",
+      "group": "Documentaries",
+      "url": "https://ef79b15c8c7c46c7a9de9d33001dbd07.mediatailor.us-west-2.amazonaws.com/v1/master/ba62fe743df0fe93366eba3a257d792884136c7f/LINEAR-859-DOCUMENTARYPLUS-DOCUMENTARYPLUS/mt/documentaryplus/859/hls/master/playlist.m3u8"
+    },
+    {
+      "name": "Documentary+ International",
+      "tvg_id": "DocumentaryPlus.us@International",
+      "group": "Documentaries",
+      "url": "https://1d153317c8db4250b3789601274e2402.mediatailor.us-west-2.amazonaws.com/v1/master/ba62fe743df0fe93366eba3a257d792884136c7f/LINEAR-887-DOCUMENTARYINTERNATIONAL-DOCUMENTARYPLUS/mt/documentaryplus/887/hls/master/playlist.m3u8"
+    },
+    {
+      "name": "Fun Roads",
+      "tvg_id": "FunRoads.us@SD",
+      "group": "Documentaries",
+      "url": "https://www.funroads-hls1.com/funroads.m3u8"
+    },
+    {
+      "name": "NBC LX Home",
+      "tvg_id": "NBCLXHome.us@HD",
+      "group": "Entertainment",
+      "url": "https://plex-xumoent-ch485-e7l5l.fast.nbcuni.com/live/master_5.m3u8"
+    },
+    {
+      "name": "Classic Arts Showcase",
+      "tvg_id": "ClassicArtsShowcase.us@SD",
+      "group": "Entertainment",
+      "url": "https://classicarts.akamaized.net/hls/live/1024257/CAS/master.m3u8"
+    },
+    {
+      "name": "Whiplash",
+      "tvg_id": "Whiplash.us@HD",
+      "group": "Entertainment",
+      "url": "https://cdn.whiplash.cc/whiplash/index.m3u8"
+    }
+  ]
+}
